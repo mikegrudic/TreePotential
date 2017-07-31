@@ -97,7 +97,7 @@ def ConstructKDTree(x, m):
     bounds[1,0] = ymin
     bounds[1,1] = ymax
     bounds[2,0] = zmin
-    bounds[2,1] = zmin
+    bounds[2,1] = zmax
     root = KDNode(bounds, x, m)
     
     nodes = np.array([root,],dtype=KDNode)
