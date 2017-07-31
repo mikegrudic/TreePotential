@@ -59,7 +59,7 @@ def PotentialWalk(x, phi, node, G=1., theta=0.7):
 
 @njit
 def GenerateChildren(node, axis):
-    N = len(node.points)
+    N = node.Npoints
     if N < 2:
         return False
     
@@ -70,7 +70,7 @@ def GenerateChildren(node, axis):
         med = xsort[N//2]
     else:
         med = np.median(x)
-    #med = (node.bounds[axis,0] + node.bounds[axis,1])/2
+
     index = (x<med)
     bounds_left = np.copy(node.bounds)
     bounds_left[axis,1] = med
@@ -81,6 +81,8 @@ def GenerateChildren(node, axis):
     index = np.invert(index)
     if np.any(index):
         node.right = KDNode(bounds_right, node.points[index],node.masses[index])
+    node.points = np.zeros((1,1))
+    node.masses = np.zeros(1)   
     return True
 
 @jit
