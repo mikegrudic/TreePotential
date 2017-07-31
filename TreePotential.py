@@ -27,18 +27,19 @@ class KDNode(object):
         self.points = points
         self.potential = 0.
         self.Npoints = points.shape[0]
+        self.masses = masses
+        self.mass = masses.sum()
         if self.Npoints < 2:
             self.IsLeaf = True
             self.COM = points[0]
         else:
             self.IsLeaf = False
             self.COM = np.zeros(3)
-        self.masses = masses
-        self.mass = masses.sum()
-        for k in range(3):
-            for i in range(self.Npoints):
-                self.COM[k] += points[i,k]*masses[i]
-            self.COM[k] /= self.mass
+            for k in range(3):
+                for i in range(self.Npoints):
+                    self.COM[k] += points[i,k]*masses[i]
+                self.COM[k] /= self.mass
+
         self.left = None
         self.right = None
 
