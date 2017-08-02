@@ -15,6 +15,8 @@ spec = [
     ('COM', float64[:]),
     ('potential', float64),
     ('IsLeaf', boolean),
+    ('HasLeft', boolean),
+    ('HasRight', boolean),
     ('left', optional(node_type)),
     ('right', optional(node_type)),
 ]
@@ -39,7 +41,8 @@ class KDNode(object):
                 for i in range(self.Npoints):
                     self.COM[k] += points[i,k]*masses[i]
                 self.COM[k] /= self.mass
-
+        self.HasLeft = False
+        self.HasRight = False        
         self.left = None
         self.right = None
 
@@ -54,8 +57,10 @@ def PotentialWalk(x, phi, node, G=1., theta=0.7):
         if node.IsLeaf or node.size/r < theta:
             phi -= G*node.mass / r
         else:
-            phi = PotentialWalk(x, phi, node.left, G, theta)
-            phi = PotentialWalk(x, phi, node.right, G, theta)
+            if node.HasLeft:
+                phi = PotentialWalk(x, phi, node.left, G, theta)
+            if node.HasRight:
+                phi = PotentialWalk(x, phi, node.right, G, theta)
     return phi
 
 @njit
@@ -79,16 +84,17 @@ def GenerateChildren(node, axis):
     bounds_right[axis,0] = med
     if np.any(index):
         node.left = KDNode(bounds_left, node.points[index], node.masses[index])
+        node.HasLeft = True
     index = np.invert(index)
     if np.any(index):
         node.right = KDNode(bounds_right, node.points[index],node.masses[index])
+        node.HasRight = True
     node.points = np.zeros((1,1))
     node.masses = np.zeros(1)   
     return True
 
 @jit
 def ConstructKDTree(x, m):
-    #x = np.sort(x)
     xmin, ymin, zmin = np.min(x,axis=0)
     xmax, ymax, zmax = np.max(x,axis=0)
     bounds = np.empty((3,2))
@@ -116,10 +122,10 @@ def ConstructKDTree(x, m):
                 continue
             else:
                 divisible_nodes += GenerateChildren(nodes[i],axis)
-                if nodes[i].left:
+                if nodes[i].HasLeft:
                     new_nodes[count] = nodes[i].left
                     count += 1
-                if nodes[i].right:
+                if nodes[i].HasRight:
                     new_nodes[count] = nodes[i].right
                     count += 1
         axis = (axis+1)%3
@@ -128,8 +134,22 @@ def ConstructKDTree(x, m):
             new_nodes = np.empty(count*2, dtype=KDNode)
     return root
 
-@jit
-def Potential(x, m, G=1., theta=0.7):
+@njit(parallel=True)
+def GetPotentialParallel(x,tree, G, theta):
+    result = np.empty(x.shape[0])
+    for i in prange(x.shape[0]):
+        result[i] = PotentialWalk(x[i],0.,tree,G,theta)
+    return result
+
+@njit
+def GetPotential(x,tree, G, theta):
+    result = np.empty(x.shape[0])
+    for i in range(x.shape[0]):
+        result[i] = PotentialWalk(x[i],0.,tree,G,theta)
+    return result
+    
+
+def Potential(x, m, G=1., theta=1., parallel=False):
     """Returns the approximate gravitational potential for a set of particles with positions x and masses m.
 
     Arguments:
@@ -138,10 +158,12 @@ def Potential(x, m, G=1., theta=0.7):
 
     Keyword arguments:
     G -- gravitational constant (default 1.0)
-    theta -- cell opening angle used to control force accuracy (default 0.7)
+    theta -- cell opening angle used to control force accuracy; smaller is faster but more accurate. (default 1.0, gives ~1% accuracy)
+    parallel -- If True, will parallelize the force summation over $OMP_NUM_THREADS cores. (default False)
     """
     tree = ConstructKDTree(x,m)
-    result = np.zeros_like(m)
-    for i in range(len(result)):
-        result[i] = PotentialWalk(x[i], 0., tree, G, theta)
-    return result    
+    result = np.zeros(len(m))
+    if parallel:
+        return GetPotentialParallel(x,tree,G,theta)
+    else:
+        return GetPotential(x,tree,G,theta)
