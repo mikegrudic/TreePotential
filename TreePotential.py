@@ -51,7 +51,20 @@ class KDNode(object):
 node_type.define(KDNode.class_type.instance_type)
 
 @njit
-def PotentialWalk(x, phi, node, G=1., theta=0.7):
+def PotentialWalk(x, phi, node, theta=0.7):
+    r = np.sqrt((x[0]-node.COM[0])**2 + (x[1]-node.COM[1])**2 + (x[2]-node.COM[2])**2)
+    if r>0:
+        if node.IsLeaf or node.size/r < theta:
+            phi -= node.mass / r
+        else:
+            if node.HasLeft:
+                phi = PotentialWalk(x, phi, node.left, theta)
+            if node.HasRight:
+                phi = PotentialWalk(x, phi, node.right,  theta)
+    return phi
+
+@njit
+def ForceWalk(x, g, node, G=1., theta=0.7):
     r = np.sqrt((x[0]-node.COM[0])**2 + (x[1]-node.COM[1])**2 + (x[2]-node.COM[2])**2)
     if r>0:
         if node.IsLeaf or node.size/r < theta:
@@ -63,6 +76,7 @@ def PotentialWalk(x, phi, node, G=1., theta=0.7):
                 phi = PotentialWalk(x, phi, node.right, G, theta)
     return phi
 
+    
 @njit
 def GenerateChildren(node, axis):
     N = node.Npoints
@@ -133,19 +147,19 @@ def ConstructKDTree(x, m):
             nodes = new_nodes[:count]
             new_nodes = np.empty(count*2, dtype=KDNode)
     return root
-
+    
 @njit(parallel=True)
 def GetPotentialParallel(x,tree, G, theta):
     result = np.empty(x.shape[0])
     for i in prange(x.shape[0]):
-        result[i] = PotentialWalk(x[i],0.,tree,G,theta)
+        result[i] = G*PotentialWalk(x[i],0.,tree,theta)
     return result
 
 @njit
 def GetPotential(x,tree, G, theta):
     result = np.empty(x.shape[0])
     for i in range(x.shape[0]):
-        result[i] = PotentialWalk(x[i],0.,tree,G,theta)
+        result[i] = G*PotentialWalk(x[i],0.,tree, theta)
     return result
     
 
