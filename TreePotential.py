@@ -52,7 +52,7 @@ node_type.define(KDNode.class_type.instance_type)
 
 @njit
 def PotentialWalk(x, phi, node, theta=0.7):
-    r = np.sqrt((x[0]-node.COM[0])**2 + (x[1]-node.COM[1])**2 + (x[2]-node.COM[2])**2)
+    r = ((x[0]-node.COM[0])**2 + (x[1]-node.COM[1])**2 + (x[2]-node.COM[2])**2)**0.5
     if r>0:
         if node.IsLeaf or node.size/r < theta:
             phi -= node.mass / r
@@ -64,17 +64,21 @@ def PotentialWalk(x, phi, node, theta=0.7):
     return phi
 
 @njit
-def ForceWalk(x, g, node, G=1., theta=0.7):
-    r = np.sqrt((x[0]-node.COM[0])**2 + (x[1]-node.COM[1])**2 + (x[2]-node.COM[2])**2)
-    if r>0:
+def ForceWalk(x, g, node, theta=0.7):
+    dx = np.empty(3)
+    for k in range(3):
+        dx[k] = node.COM[k] - x[k]
+    r = (dx[0]**2 + dx[1]**2 + dx[2]**2)**0.5
+    if r:
         if node.IsLeaf or node.size/r < theta:
-            phi -= G*node.mass / r
+            for k in range(3):
+                g[k] += node.mass*dx[k]/ r**3
         else:
             if node.HasLeft:
-                phi = PotentialWalk(x, phi, node.left, G, theta)
+                g = ForceWalk(x, g, node.left, theta)
             if node.HasRight:
-                phi = PotentialWalk(x, phi, node.right, G, theta)
-    return phi
+                g = ForceWalk(x, g, node.right, theta)
+    return g
 
     
 @njit
