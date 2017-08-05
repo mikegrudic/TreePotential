@@ -50,11 +50,13 @@ class KDNode(object):
 
 node_type.define(KDNode.class_type.instance_type)
 
-@njit
+@njit #(cache=True)
 def PotentialWalk(x, phi, node, theta=0.7):
     r = ((x[0]-node.COM[0])**2 + (x[1]-node.COM[1])**2 + (x[2]-node.COM[2])**2)**0.5
+    X = 0
     if r>0:
         if node.IsLeaf or node.size/r < theta:
+#            phi += 1
             phi -= node.mass / r
         else:
             if node.HasLeft:
@@ -63,7 +65,7 @@ def PotentialWalk(x, phi, node, theta=0.7):
                 phi = PotentialWalk(x, phi, node.right,  theta)
     return phi
 
-@njit
+@njit#(cache=True)
 def ForceWalk(x, g, node, theta=0.7):
     dx = np.empty(3)
     for k in range(3):
@@ -88,12 +90,12 @@ def GenerateChildren(node, axis):
         return False
     
     x = node.points[:,axis]
-
-    if N < 1000:
-        xsort = np.sort(x)
-        med = xsort[N//2]
-    else:
-        med = np.median(x)
+    med = (x.max()+x.min())/2
+#    if N < 1000:
+#        xsort = np.sort(x)
+#        med = xsort[N//2]
+#    else:
+#        med = np.median(x)
 
     index = (x<med)
     bounds_left = np.copy(node.bounds)
@@ -177,7 +179,7 @@ def Potential(x, m, G=1., theta=1., parallel=False):
     Keyword arguments:
     G -- gravitational constant (default 1.0)
     theta -- cell opening angle used to control force accuracy; smaller is faster but more accurate. (default 1.0, gives ~1% accuracy)
-    parallel -- If True, will parallelize the force summation over $OMP_NUM_THREADS cores. (default False)
+    parallel -- If True, will parallelize the force summation over all available cores. (default False)
     """
     tree = ConstructKDTree(x,m)
     result = np.zeros(len(m))
