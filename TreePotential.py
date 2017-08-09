@@ -20,11 +20,18 @@ spec = [
 
 @jitclass(spec)
 class KDNode(object):
-    def __init__(self, bounds, points, masses):
-        self.bounds = bounds
-        self.size = max(bounds[0,1]-bounds[0,0],bounds[1,1]-bounds[1,0],bounds[2,1]-bounds[2,0])
+    def __init__(self, points, masses):
+        self.bounds = np.empty((3,2))
+        self.bounds[0,0] = points[:,0].min()
+        self.bounds[0,1] = points[:,0].max()
+        self.bounds[1,0] = points[:,1].min()
+        self.bounds[1,1] = points[:,1].max()
+        self.bounds[2,0] = points[:,2].min()
+        self.bounds[2,1] = points[:,2].max()
+
+        self.size = max(self.bounds[0,1]-self.bounds[0,0],self.bounds[1,1]-self.bounds[1,0],self.bounds[2,1]-self.bounds[2,0])
         self.points = points
-#        self.potential = 0.
+
         self.Npoints = points.shape[0]
         self.masses = masses
         self.mass = masses.sum()
@@ -43,7 +50,23 @@ class KDNode(object):
         self.left = None
         self.right = None
 
-            
+    def GenerateChildren(self, axis):
+        if self.Npoints < 2:
+            return False
+        x = self.points[:,axis]
+        med = (self.bounds[axis,0] + self.bounds[axis,1])/2
+        index = (x<med)
+
+        if np.any(index):
+            self.left = KDNode(self.points[index], self.masses[index])
+            self.HasLeft = True
+        index = np.invert(index)
+        if np.any(index):
+            self.right = KDNode(self.points[index],self.masses[index])
+            self.HasRight = True
+        self.points = np.zeros((1,1))
+        self.masses = np.zeros(1)   
+        return True
 
 node_type.define(KDNode.class_type.instance_type)
 
@@ -92,42 +115,11 @@ def CorrelationWalk(counts, rbins, x, node):
         continue
         i += 1         
         
-@njit
-def GenerateChildren(node, axis):
-    N = node.Npoints
-    if N < 2:
-        return False
-    
-    x = node.points[:,axis]
-    med = (x.max() + x.min())/2
-    index = (x<med)
-    bounds_left = np.copy(node.bounds)
-    bounds_left[axis,1] = med
-    bounds_right = np.copy(node.bounds)
-    bounds_right[axis,0] = med
-    if np.any(index):
-        node.left = KDNode(bounds_left, node.points[index], node.masses[index])
-        node.HasLeft = True
-    index = np.invert(index)
-    if np.any(index):
-        node.right = KDNode(bounds_right, node.points[index],node.masses[index])
-        node.HasRight = True
-    node.points = np.zeros((1,1))
-    node.masses = np.zeros(1)   
-    return True
+
 
 @jit
 def ConstructKDTree(x, m):
-    xmin, ymin, zmin = np.min(x,axis=0)
-    xmax, ymax, zmax = np.max(x,axis=0)
-    bounds = np.empty((3,2))
-    bounds[0,0] = xmin
-    bounds[0,1] = xmax
-    bounds[1,0] = ymin
-    bounds[1,1] = ymax
-    bounds[2,0] = zmin
-    bounds[2,1] = zmax
-    root = KDNode(bounds, x, m)
+    root = KDNode(x, m)
     
     nodes = np.array([root,],dtype=KDNode)
     new_nodes = np.empty(2,dtype=KDNode)
@@ -141,13 +133,14 @@ def ConstructKDTree(x, m):
             if nodes[i].IsLeaf:
                 continue
             else:
-                divisible_nodes += GenerateChildren(nodes[i],axis)
+                divisible_nodes += nodes[i].GenerateChildren(axis)
                 if nodes[i].HasLeft:
                     new_nodes[count] = nodes[i].left
                     count += 1
                 if nodes[i].HasRight:
                     new_nodes[count] = nodes[i].right
                     count += 1
+                    
         axis = (axis+1)%3
         if divisible_nodes:
             nodes = new_nodes[:count]
