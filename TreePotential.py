@@ -11,7 +11,6 @@ spec = [
     ('Npoints', int64),
     ('mass', float64),
     ('COM', float64[:]),
-#    ('potential', float64),
     ('IsLeaf', boolean),
     ('HasLeft', boolean),
     ('HasRight', boolean),
@@ -48,7 +47,7 @@ class KDNode(object):
 
 node_type.define(KDNode.class_type.instance_type)
 
-@njit #(cache=True)
+@njit
 def PotentialWalk(x, phi, node, theta=0.7):
     r = ((x[0]-node.COM[0])**2 + (x[1]-node.COM[1])**2 + (x[2]-node.COM[2])**2)**0.5
     X = 0
@@ -74,8 +73,6 @@ def ForceWalk(x, g, node, theta=0.7):
             g[0] += dx*mr3inv
             g[1] += dy*mr3inv
             g[2] += dz*mr3inv
-            #for k in range(3):
-            #    g[k] += dx[k]*mr3inv
         else:
             if node.HasLeft:
                 g = ForceWalk(x, g, node.left, theta)
@@ -93,8 +90,7 @@ def CorrelationWalk(counts, rbins, x, node):
     i = 0
     while r < rbins[i]:
         continue
-        i += 1     
-    
+        i += 1         
         
 @njit
 def GenerateChildren(node, axis):
@@ -103,13 +99,7 @@ def GenerateChildren(node, axis):
         return False
     
     x = node.points[:,axis]
-    med = (x.max()+x.min())/2
-#    if N < 1000:
-#        xsort = np.sort(x)
-#        med = xsort[N//2]
-#    else:
-#        med = np.median(x)
-
+    med = (x.max() + x.min())/2
     index = (x<med)
     bounds_left = np.copy(node.bounds)
     bounds_left[axis,1] = med
@@ -141,15 +131,12 @@ def ConstructKDTree(x, m):
     
     nodes = np.array([root,],dtype=KDNode)
     new_nodes = np.empty(2,dtype=KDNode)
-    leafnodes = []
-    divisible_nodes = True
-    depth = 0
     axis = 0
+    divisible_nodes = True
     while divisible_nodes:
         N = len(nodes)
         divisible_nodes = False
         count = 0
-        depth += 1
         for i in range(N):
             if nodes[i].IsLeaf:
                 continue
