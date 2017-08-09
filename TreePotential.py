@@ -1,7 +1,5 @@
-from numba import jitclass, prange
-from numba import int32, deferred_type, optional, float64, boolean, int64, njit, jit
+from numba import int32, deferred_type, optional, float64, boolean, int64, njit, jit, jitclass, prange
 import numpy as np
-
 
 node_type = deferred_type()
 
@@ -13,7 +11,7 @@ spec = [
     ('Npoints', int64),
     ('mass', float64),
     ('COM', float64[:]),
-    ('potential', float64),
+#    ('potential', float64),
     ('IsLeaf', boolean),
     ('HasLeft', boolean),
     ('HasRight', boolean),
@@ -27,7 +25,7 @@ class KDNode(object):
         self.bounds = bounds
         self.size = max(bounds[0,1]-bounds[0,0],bounds[1,1]-bounds[1,0],bounds[2,1]-bounds[2,0])
         self.points = points
-        self.potential = 0.
+#        self.potential = 0.
         self.Npoints = points.shape[0]
         self.masses = masses
         self.mass = masses.sum()
@@ -56,7 +54,6 @@ def PotentialWalk(x, phi, node, theta=0.7):
     X = 0
     if r>0:
         if node.IsLeaf or node.size/r < theta:
-#            phi += 1
             phi -= node.mass / r
         else:
             if node.HasLeft:
@@ -65,16 +62,20 @@ def PotentialWalk(x, phi, node, theta=0.7):
                 phi = PotentialWalk(x, phi, node.right,  theta)
     return phi
 
-@njit#(cache=True)
+@njit
 def ForceWalk(x, g, node, theta=0.7):
-    dx = np.empty(3)
-    for k in range(3):
-        dx[k] = node.COM[k] - x[k]
-    r = (dx[0]**2 + dx[1]**2 + dx[2]**2)**0.5
-    if r:
+    dx = node.COM[0]-x[0]
+    dy = node.COM[1]-x[1]
+    dz = node.COM[2]-x[2]
+    r = (dx**2 + dy**2 + dz**2)**0.5
+    if r>0:
         if node.IsLeaf or node.size/r < theta:
-            for k in range(3):
-                g[k] += node.mass*dx[k]/ r**3
+            mr3inv = node.mass/(r*r*r)
+            g[0] += dx*mr3inv
+            g[1] += dy*mr3inv
+            g[2] += dz*mr3inv
+            #for k in range(3):
+            #    g[k] += dx[k]*mr3inv
         else:
             if node.HasLeft:
                 g = ForceWalk(x, g, node.left, theta)
@@ -82,7 +83,19 @@ def ForceWalk(x, g, node, theta=0.7):
                 g = ForceWalk(x, g, node.right, theta)
     return g
 
+@njit
+def CorrelationWalk(counts, rbins, x, node):
+    #idea: if the center of the node is in a bin and the bounds also lie in the same bin, add to that bin. If all bounds are outside all bins, return 0. Else,repeat for children
+    dx = node.COM[0]-x[0]
+    dy = node.COM[1]-x[1]
+    dz = node.COM[2]-x[2]
+    r = (dx**2 + dy**2 + dz**2)**0.5
+    i = 0
+    while r < rbins[i]:
+        continue
+        i += 1     
     
+        
 @njit
 def GenerateChildren(node, axis):
     N = node.Npoints
@@ -167,7 +180,20 @@ def GetPotential(x,tree, G, theta):
     for i in range(x.shape[0]):
         result[i] = G*PotentialWalk(x[i],0.,tree, theta)
     return result
-    
+
+@njit
+def GetAccel(x, tree, G, theta):
+    result = np.empty(x.shape)
+    for i in range(x.shape[0]):
+        result[i] = G*ForceWalk(x[i], np.zeros(3), tree, theta)
+    return result
+
+@njit(parallel=True)
+def GetAccelParallel(x, tree, G, theta):
+    result = np.empty(x.shape)
+    for i in prange(x.shape[0]):
+        result[i] = G*ForceWalk(x[i], np.zeros(3), tree, theta)
+    return result
 
 def Potential(x, m, G=1., theta=1., parallel=False):
     """Returns the approximate gravitational potential for a set of particles with positions x and masses m.
@@ -187,3 +213,11 @@ def Potential(x, m, G=1., theta=1., parallel=False):
         return GetPotentialParallel(x,tree,G,theta)
     else:
         return GetPotential(x,tree,G,theta)
+
+def Accel(x, m, G=1., theta=1., parallel=False):
+    tree = ConstructKDTree(x,m)
+    result = np.zeros_like(x)
+    if parallel:
+        return GetAccelParallel(x, tree, G, theta)
+    else:
+        return GetAccel(x, tree, G, theta)
