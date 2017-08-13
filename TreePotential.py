@@ -187,17 +187,17 @@ def Potential(x, m, G=1., theta=1., parallel=False):
     theta -- cell opening angle used to control force accuracy; smaller is faster but more accurate. (default 1.0, gives ~1% accuracy)
     parallel -- If True, will parallelize the force summation over all available cores. (default False)
     """
-    tree = ConstructKDTree(x,m)
+    tree = ConstructKDTree(np.float64(x),np.float64(m))
     result = np.zeros(len(m))
     if parallel:
-        return GetPotentialParallel(x,tree,G,theta)
+        return GetPotentialParallel(np.float64(x),tree,G,theta)
     else:
-        return GetPotential(x,tree,G,theta)
+        return GetPotential(np.float64(x),tree,G,theta)
 
 def Accel(x, m, G=1., theta=1., parallel=False):
-    tree = ConstructKDTree(x,m)
+    tree = ConstructKDTree(np.float64(x),np.float64(m))
     result = np.zeros_like(x)
     if parallel:
-        return GetAccelParallel(x, tree, G, theta)
+        return GetAccelParallel(np.float64(x), tree, G, theta)
     else:
-        return GetAccel(x, tree, G, theta)
+        return GetAccel(np.float64(x), tree, G, theta)
