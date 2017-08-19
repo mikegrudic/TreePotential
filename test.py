@@ -1,19 +1,19 @@
 from TreePotential import *
-from Potential import *
+#rom Potential import *
 import numpy as np
 from time import time
 from matplotlib import pyplot as plt
 parallel = False
-N = 2**np.arange(4,19)
+N = 2**np.arange(4,22)
 t1 = []
 t2 = []
 error = []
 x = np.random.rand(10,3)
 m = np.random.rand(10)
 Potential(x,m, parallel=parallel)
-ComputePotential2(x,m)
+BruteForcePotential(x,m)
 for n in N:
-    print n
+    print(n)
     x = np.random.rand(n)
     r = np.sqrt( x**(2./3) * (1+x**(2./3) + x**(4./3))/(1-x**2))
     x = np.random.normal(size=(n,3))
@@ -22,16 +22,16 @@ for n in N:
     t = time()
     phi2 = Potential(x,m, parallel=parallel, theta=0.7)
     t2.append(time()-t)
-    if n < 10**5:
+    if n <=64**3:
         t = time()
-        phi1 = ComputePotential2(x,m)
+        phi1 = BruteForcePotential(x,m)
         t1.append(time()-t)
         error.append(np.max(np.abs((phi1-phi2)/phi1)))
     else:
         t1.append(0)
         error.append(0)
 
-print N, t2
+print(N, t2)
 plt.loglog(N, np.array(t1)/N,label="Brute Force")
 plt.loglog(N, np.array(t2)/N,label="Tree")
 plt.ylabel("Time per particle")

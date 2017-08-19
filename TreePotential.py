@@ -227,3 +227,16 @@ def CorrelationFunction(x, m, rbins, frac=1.):
             CorrelationWalk(counts, rbins, np.float64(x[i]), tree)
 
     return counts / (4*np.pi/3 * np.diff(rbins**3)) / frac
+
+@njit
+def BruteForcePotential(x,m,G=1.):
+    potential = np.zeros_like(m)
+    for i in range(x.shape[0]):
+        for j in range(i+1,x.shape[0]):
+            dx = x[i,0]-x[j,0]
+            dy = x[i,1]-x[j,1]
+            dz = x[i,2]-x[j,2]
+            rinv = 1/np.sqrt(dx*dx + dy*dy + dz*dz)
+            potential[i] += m[j]*rinv
+            potential[j] += m[i]*rinv
+    return -G*potential
