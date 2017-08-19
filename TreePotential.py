@@ -106,16 +106,31 @@ def ForceWalk(x, g, node, theta=0.7):
 @njit
 def CorrelationWalk(counts, rbins, x, node):
     #idea: if the center of the node is in a bin and the bounds also lie in the same bin, add to that bin. If all bounds are outside all bins, return 0. Else,repeat for children
-    dx = node.COM[0]-x[0]
-    dy = node.COM[1]-x[1]
-    dz = node.COM[2]-x[2]
+    dx = 0.5*(node.bounds[0,0]+node.bounds[0,1])-x[0]
+    dy = 0.5*(node.bounds[1,0]+node.bounds[1,1])-x[1]
+    dz = 0.5*(node.bounds[2,0]+node.bounds[2,1])-x[2]
     r = (dx**2 + dy**2 + dz**2)**0.5
-    i = 0
-    while r < rbins[i]:
-        continue
-        i += 1         
-        
 
+    sizebound = node.size*1.73
+    rmin, rmax = r-sizebound/2, r+sizebound/2
+    if rmin > rbins[-1]:
+        return
+    if rmax < rbins[0]:
+        return
+
+    N = rbins.shape[0]
+
+    for i in range(1,N):
+        if rbins[i] > r: break
+        
+    if rbins[i] > rmax and rbins[i-1] < rmin:
+        counts[i-1] += node.Npoints
+    else:
+        if node.HasLeft:
+            CorrelationWalk(counts, rbins, x, node.left)
+        if node.HasRight:
+            CorrelationWalk(counts, rbins, x, node.right)
+    return
 
 @jit
 def ConstructKDTree(x, m):
@@ -201,3 +216,14 @@ def Accel(x, m, G=1., theta=1., parallel=False):
         return GetAccelParallel(np.float64(x), tree, G, theta)
     else:
         return GetAccel(np.float64(x), tree, G, theta)
+
+@jit
+def CorrelationFunction(x, m, rbins, frac=1.):
+    N = len(x)
+    tree = ConstructKDTree(np.float64(x), np.float64(m))
+    counts = np.zeros(len(rbins)-1, dtype=np.int64)
+    for i in range(N):
+        if np.random.rand() < frac:
+            CorrelationWalk(counts, rbins, np.float64(x[i]), tree)
+
+    return counts / (4*np.pi/3 * np.diff(rbins**3)) / frac
