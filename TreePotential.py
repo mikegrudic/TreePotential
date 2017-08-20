@@ -19,6 +19,8 @@ spec = [
     ('right', optional(node_type)),
 ]
 
+
+
 @jitclass(spec)
 class KDNode(object):
     def __init__(self, points, masses):
@@ -35,24 +37,24 @@ class KDNode(object):
 
         self.Npoints = points.shape[0]
         self.masses = masses
-        self.mass = masses.sum()
-        if self.Npoints < 2:
+        self.mass = np.sum(masses)
+        if self.Npoints <= 16:
             self.IsLeaf = True
-            self.COM = points[0]
+        #    self.COM = points[0]
         else:
             self.IsLeaf = False
-            self.COM = zeros(3)
-            for k in range(3):
-                for i in range(self.Npoints):
-                    self.COM[k] += points[i,k]*masses[i]
-                self.COM[k] /= self.mass
+        self.COM = zeros(3)
+        for k in range(3):
+            for i in range(self.Npoints):
+                self.COM[k] += points[i,k]*masses[i]
+            self.COM[k] /= self.mass
         self.HasLeft = False
         self.HasRight = False        
         self.left = None
         self.right = None
 
     def GenerateChildren(self, axis):
-        if self.Npoints < 2:
+        if self.IsLeaf:
             return False
         x = self.points[:,axis]
         med = (self.bounds[axis,0] + self.bounds[axis,1])/2
@@ -73,10 +75,15 @@ node_type.define(KDNode.class_type.instance_type)
 
 @njit
 def PotentialWalk(x, phi, node, theta=0.7):
+    if node.IsLeaf:
+        for i in range(node.Npoints):
+            r = sqrt((x[0]-node.points[i,0])**2 + (x[1]-node.points[i,1])**2 + (x[2]-node.points[i,2])**2)
+            if r>0:
+                phi -= node.masses[i]/r
+        return phi
     r = sqrt((x[0]-node.COM[0])**2 + (x[1]-node.COM[1])**2 + (x[2]-node.COM[2])**2)
-    X = 0
     if r>0:
-        if node.IsLeaf or node.size/r < theta:
+        if node.size/r < theta:
             phi -= node.mass / r
         else:
             if node.HasLeft:

@@ -4,7 +4,7 @@ import numpy as np
 from time import time
 from matplotlib import pyplot as plt
 parallel = False
-N = 2**np.arange(4,20)
+N = 2**np.arange(4,18)
 t1 = []
 t2 = []
 error = []
@@ -23,7 +23,7 @@ for n in N:
     m = np.random.rand(n)
     t = time()
 #    phi2 = Accel(x,m,parallel=parallel,theta=0.7)
-    phi2 = Potential(x,m, parallel=parallel, theta=1.)
+    phi2 = Potential(x,m, parallel=parallel, theta=0.7)
     t2.append(time()-t)
     if n <64**3:
         t = time()
