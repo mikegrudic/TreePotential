@@ -1,5 +1,6 @@
 from numba import int32, deferred_type, optional, float64, boolean, int64, njit, jit, jitclass, prange
 import numpy as np
+from numpy import sqrt, zeros, zeros_like, empty
 
 node_type = deferred_type()
 
@@ -21,7 +22,7 @@ spec = [
 @jitclass(spec)
 class KDNode(object):
     def __init__(self, points, masses):
-        self.bounds = np.empty((3,2))
+        self.bounds = empty((3,2))
         self.bounds[0,0] = points[:,0].min()
         self.bounds[0,1] = points[:,0].max()
         self.bounds[1,0] = points[:,1].min()
@@ -40,7 +41,7 @@ class KDNode(object):
             self.COM = points[0]
         else:
             self.IsLeaf = False
-            self.COM = np.zeros(3)
+            self.COM = zeros(3)
             for k in range(3):
                 for i in range(self.Npoints):
                     self.COM[k] += points[i,k]*masses[i]
@@ -64,15 +65,15 @@ class KDNode(object):
         if np.any(index):
             self.right = KDNode(self.points[index],self.masses[index])
             self.HasRight = True
-        self.points = np.zeros((1,1))
-        self.masses = np.zeros(1)   
+        self.points = zeros((1,1))
+        self.masses = zeros(1)   
         return True
 
 node_type.define(KDNode.class_type.instance_type)
 
 @njit
 def PotentialWalk(x, phi, node, theta=0.7):
-    r = ((x[0]-node.COM[0])**2 + (x[1]-node.COM[1])**2 + (x[2]-node.COM[2])**2)**0.5
+    r = sqrt((x[0]-node.COM[0])**2 + (x[1]-node.COM[1])**2 + (x[2]-node.COM[2])**2)
     X = 0
     if r>0:
         if node.IsLeaf or node.size/r < theta:
@@ -89,7 +90,7 @@ def ForceWalk(x, g, node, theta=0.7):
     dx = node.COM[0]-x[0]
     dy = node.COM[1]-x[1]
     dz = node.COM[2]-x[2]
-    r = (dx**2 + dy**2 + dz**2)**0.5
+    r = sqrt(dx**2 + dy**2 + dz**2)
     if r>0:
         if node.IsLeaf or node.size/r < theta:
             mr3inv = node.mass/(r*r*r)
@@ -137,7 +138,7 @@ def ConstructKDTree(x, m):
     root = KDNode(x, m)
     
     nodes = np.array([root,],dtype=KDNode)
-    new_nodes = np.empty(2,dtype=KDNode)
+    new_nodes = empty(2,dtype=KDNode)
     axis = 0
     divisible_nodes = True
     while divisible_nodes:
@@ -159,35 +160,35 @@ def ConstructKDTree(x, m):
         axis = (axis+1)%3
         if divisible_nodes:
             nodes = new_nodes[:count]
-            new_nodes = np.empty(count*2, dtype=KDNode)
+            new_nodes = empty(count*2, dtype=KDNode)
     return root
     
 @njit(parallel=True)
 def GetPotentialParallel(x,tree, G, theta):
-    result = np.empty(x.shape[0])
+    result = empty(x.shape[0])
     for i in prange(x.shape[0]):
         result[i] = G*PotentialWalk(x[i],0.,tree,theta)
     return result
 
 @njit
 def GetPotential(x,tree, G, theta):
-    result = np.empty(x.shape[0])
+    result = empty(x.shape[0])
     for i in range(x.shape[0]):
         result[i] = G*PotentialWalk(x[i],0.,tree, theta)
     return result
 
 @njit
 def GetAccel(x, tree, G, theta):
-    result = np.empty(x.shape)
+    result = empty(x.shape)
     for i in range(x.shape[0]):
-        result[i] = G*ForceWalk(x[i], np.zeros(3), tree, theta)
+        result[i] = G*ForceWalk(x[i], zeros(3), tree, theta)
     return result
 
 @njit(parallel=True)
 def GetAccelParallel(x, tree, G, theta):
-    result = np.empty(x.shape)
+    result = empty(x.shape)
     for i in prange(x.shape[0]):
-        result[i] = G*ForceWalk(x[i], np.zeros(3), tree, theta)
+        result[i] = G*ForceWalk(x[i], zeros(3), tree, theta)
     return result
 
 def Potential(x, m, G=1., theta=1., parallel=False):
@@ -203,7 +204,7 @@ def Potential(x, m, G=1., theta=1., parallel=False):
     parallel -- If True, will parallelize the force summation over all available cores. (default False)
     """
     tree = ConstructKDTree(np.float64(x),np.float64(m))
-    result = np.zeros(len(m))
+    result = zeros(len(m))
     if parallel:
         return GetPotentialParallel(np.float64(x),tree,G,theta)
     else:
@@ -211,7 +212,7 @@ def Potential(x, m, G=1., theta=1., parallel=False):
 
 def Accel(x, m, G=1., theta=1., parallel=False):
     tree = ConstructKDTree(np.float64(x),np.float64(m))
-    result = np.zeros_like(x)
+    result = zeros_like(x)
     if parallel:
         return GetAccelParallel(np.float64(x), tree, G, theta)
     else:
@@ -221,7 +222,7 @@ def Accel(x, m, G=1., theta=1., parallel=False):
 def CorrelationFunction(x, m, rbins, frac=1.):
     N = len(x)
     tree = ConstructKDTree(np.float64(x), np.float64(m))
-    counts = np.zeros(len(rbins)-1, dtype=np.int64)
+    counts = zeros(len(rbins)-1, dtype=np.int64)
     for i in range(N):
         if np.random.rand() < frac:
             CorrelationWalk(counts, rbins, np.float64(x[i]), tree)
@@ -230,13 +231,31 @@ def CorrelationFunction(x, m, rbins, frac=1.):
 
 @njit
 def BruteForcePotential(x,m,G=1.):
-    potential = np.zeros_like(m)
+    potential = zeros_like(m)
     for i in range(x.shape[0]):
         for j in range(i+1,x.shape[0]):
             dx = x[i,0]-x[j,0]
             dy = x[i,1]-x[j,1]
             dz = x[i,2]-x[j,2]
-            rinv = 1/np.sqrt(dx*dx + dy*dy + dz*dz)
+            rinv = 1./sqrt(dx*dx + dy*dy + dz*dz)
             potential[i] += m[j]*rinv
             potential[j] += m[i]*rinv
     return -G*potential
+
+@njit#(parallel=True)
+def BruteForceAccel(x,m,G=1.):
+    accel = zeros_like(x)
+    for i in range(x.shape[0]):
+        for j in range(i+1,x.shape[0]):
+            dx = x[j,0]-x[i,0]
+            dy = x[j,1]-x[i,1]
+            dz = x[j,2]-x[i,2]
+            r3inv = (1./sqrt(dx*dx + dy*dy + dz*dz))**3
+            accel[i,0] += m[j]*dx*r3inv
+            accel[i,1] += m[j]*dy*r3inv
+            accel[i,2] += m[j]*dz*r3inv
+            accel[j,0] -= m[i]*dx*r3inv
+            accel[j,1] -= m[i]*dy*r3inv
+            accel[j,2] -= m[i]*dz*r3inv
+    return -G*accel
+

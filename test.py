@@ -4,12 +4,14 @@ import numpy as np
 from time import time
 from matplotlib import pyplot as plt
 parallel = False
-N = 2**np.arange(4,22)
+N = 2**np.arange(4,20)
 t1 = []
 t2 = []
 error = []
 x = np.random.rand(10,3)
 m = np.random.rand(10)
+#Accel(x,m,parallel=parallel)
+#BruteForceAccel(x,m)
 Potential(x,m, parallel=parallel)
 BruteForcePotential(x,m)
 for n in N:
@@ -20,10 +22,12 @@ for n in N:
     x = (x.T * r/np.sum(x**2,axis=1)**0.5).T
     m = np.random.rand(n)
     t = time()
-    phi2 = Potential(x,m, parallel=parallel, theta=0.7)
+#    phi2 = Accel(x,m,parallel=parallel,theta=0.7)
+    phi2 = Potential(x,m, parallel=parallel, theta=1.)
     t2.append(time()-t)
-    if n <=64**3:
+    if n <64**3:
         t = time()
+    #    phi1 = BruteForceAccel(x,m)
         phi1 = BruteForcePotential(x,m)
         t1.append(time()-t)
         error.append(np.max(np.abs((phi1-phi2)/phi1)))
