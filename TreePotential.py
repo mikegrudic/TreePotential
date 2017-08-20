@@ -7,6 +7,7 @@ node_type = deferred_type()
 spec = [
     ('bounds', float64[:,:]),
     ('size', float64),
+    ('delta', float64),
     ('points', float64[:,:]),
     ('masses', float64[:]),
     ('Npoints', int64),
@@ -31,23 +32,26 @@ class KDNode(object):
         self.bounds[1,1] = points[:,1].max()
         self.bounds[2,0] = points[:,2].min()
         self.bounds[2,1] = points[:,2].max()
-
+        
         self.size = max(self.bounds[0,1]-self.bounds[0,0],self.bounds[1,1]-self.bounds[1,0],self.bounds[2,1]-self.bounds[2,0])
         self.points = points
-
         self.Npoints = points.shape[0]
         self.masses = masses
         self.mass = np.sum(masses)
-        if self.Npoints <= 16:
+        self.delta = 0.
+        if self.Npoints == 1:
             self.IsLeaf = True
-        #    self.COM = points[0]
+            self.COM = points[0]
         else:
             self.IsLeaf = False
-        self.COM = zeros(3)
-        for k in range(3):
-            for i in range(self.Npoints):
-                self.COM[k] += points[i,k]*masses[i]
-            self.COM[k] /= self.mass
+            self.COM = zeros(3)
+            for k in range(3):
+                for i in range(self.Npoints):
+                    self.COM[k] += points[i,k]*masses[i]
+                self.COM[k] /= self.mass
+                self.delta += (0.5*(self.bounds[k,1]+self.bounds[k,0]) - self.COM[k])**2
+            self.delta = sqrt(self.delta)
+           
         self.HasLeft = False
         self.HasRight = False        
         self.left = None
@@ -74,16 +78,10 @@ class KDNode(object):
 node_type.define(KDNode.class_type.instance_type)
 
 @njit
-def PotentialWalk(x, phi, node, theta=0.7):
-    if node.IsLeaf:
-        for i in range(node.Npoints):
-            r = sqrt((x[0]-node.points[i,0])**2 + (x[1]-node.points[i,1])**2 + (x[2]-node.points[i,2])**2)
-            if r>0:
-                phi -= node.masses[i]/r
-        return phi
+def PotentialWalk(x, phi, node, theta=0.7):                
     r = sqrt((x[0]-node.COM[0])**2 + (x[1]-node.COM[1])**2 + (x[2]-node.COM[2])**2)
     if r>0:
-        if node.size/r < theta:
+        if node.size/r < theta or node.IsLeaf:
             phi -= node.mass / r
         else:
             if node.HasLeft:
@@ -97,9 +95,10 @@ def ForceWalk(x, g, node, theta=0.7):
     dx = node.COM[0]-x[0]
     dy = node.COM[1]-x[1]
     dz = node.COM[2]-x[2]
-    r = sqrt(dx**2 + dy**2 + dz**2)
+    r = sqrt(dx*dx + dy*dy + dz*dz)
     if r>0:
-        if node.IsLeaf or node.size/r < theta:
+        if node.IsLeaf or r > node.size/theta + node.delta:
+            r = sqrt(r*r + 0.01)
             mr3inv = node.mass/(r*r*r)
             g[0] += dx*mr3inv
             g[1] += dy*mr3inv
@@ -257,12 +256,12 @@ def BruteForceAccel(x,m,G=1.):
             dx = x[j,0]-x[i,0]
             dy = x[j,1]-x[i,1]
             dz = x[j,2]-x[i,2]
-            r3inv = (1./sqrt(dx*dx + dy*dy + dz*dz))**3
+            r3inv = (1./sqrt(0.01 + dx*dx + dy*dy + dz*dz))**3
             accel[i,0] += m[j]*dx*r3inv
             accel[i,1] += m[j]*dy*r3inv
             accel[i,2] += m[j]*dz*r3inv
             accel[j,0] -= m[i]*dx*r3inv
             accel[j,1] -= m[i]*dy*r3inv
             accel[j,2] -= m[i]*dz*r3inv
-    return -G*accel
+    return G*accel
 
